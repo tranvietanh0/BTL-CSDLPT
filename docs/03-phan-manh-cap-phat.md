@@ -54,227 +54,142 @@ flowchart TD
     E --> H[inventory_south]
 ```
 
-3.1.1. Biểu thức phân mảnh ngang hình thức
+### 3.1.1. Biểu thức phân mảnh ngang hình thức
 
-Các bảng giao dịch trong hệ thống được phân mảnh ngang (horizontal fragmentation) theo vùng địa lý hoặc site xử lý.
+Các bảng giao dịch trong hệ thống được phân mảnh ngang (**horizontal fragmentation**) theo vùng địa lý hoặc site xử lý.
 
-Customers
+#### Customers
 
 Khách hàng được phân theo vùng:
 
-customers
-north
-​
+```text
+customers_north
+= σ(region='north')(customers)
 
-=σ(region=
-′
-north
-′
-)(customers)
-customers
-central
-​
+customers_central
+= σ(region='central')(customers)
 
-=σ(region=
-′
-central
-′
-)(customers)
-customers
-south
-​
-
-=σ(region=
-′
-south
-′
-)(customers)
+customers_south
+= σ(region='south')(customers)
+```
 
 Ý nghĩa:
 
-khách miền Bắc lưu tại site north
-khách miền Trung lưu tại site central
-khách miền Nam lưu tại site south
-Inventory
+- khách miền Bắc lưu tại site `north`
+- khách miền Trung lưu tại site `central`
+- khách miền Nam lưu tại site `south`
+
+#### Inventory
 
 Tồn kho được phân theo warehouse thuộc site:
 
-inventory
-north
-​
+```text
+inventory_north
+= σ(site='north')(inventory)
 
-=σ(site=
-′
-north
-′
-)(inventory)
-inventory
-central
-​
+inventory_central
+= σ(site='central')(inventory)
 
-=σ(site=
-′
-central
-′
-)(inventory)
-inventory
-south
-​
-
-=σ(site=
-′
-south
-′
-)(inventory)
+inventory_south
+= σ(site='south')(inventory)
+```
 
 Ý nghĩa:
 
-kho Hà Nội thuộc north
-kho Đà Nẵng thuộc central
-kho TP.HCM thuộc south
-Orders
+- kho Hà Nội thuộc `north`
+- kho Đà Nẵng thuộc `central`
+- kho TP.HCM thuộc `south`
+
+#### Orders
 
 Đơn hàng được phân theo site xử lý chính:
 
-orders
-north
-​
+```text
+orders_north
+= σ(primary_site='north')(orders)
 
-=σ(primary_site=
-′
-north
-′
-)(orders)
-orders
-central
-​
+orders_central
+= σ(primary_site='central')(orders)
 
-=σ(primary_site=
-′
-central
-′
-)(orders)
-orders
-south
-​
-
-=σ(primary_site=
-′
-south
-′
-)(orders)
+orders_south
+= σ(primary_site='south')(orders)
+```
 
 Ý nghĩa:
 
-Mỗi đơn hàng chỉ thuộc một primary_site, tránh trùng dữ liệu giữa các site.
+Mỗi đơn hàng chỉ thuộc một `primary_site`, tránh trùng dữ liệu giữa các site.
 
-Allocation logs
+#### Allocation logs
 
 Các log cấp phát được lưu theo site phát sinh:
 
-allocation_logs
-north
-​
+```text
+allocation_logs_north
+= σ(site='north')(allocation_logs)
 
-=σ(site=
-′
-north
-′
-)(allocation_logs)
-allocation_logs
-central
-​
+allocation_logs_central
+= σ(site='central')(allocation_logs)
 
-=σ(site=
-′
-central
-′
-)(allocation_logs)
-allocation_logs
-south
-​
+allocation_logs_south
+= σ(site='south')(allocation_logs)
+```
 
-=σ(site=
-′
-south
-′
-)(allocation_logs)
-Inventory audit
+#### Inventory audit
 
 Audit tồn kho được lưu tại site nơi transaction diễn ra:
 
-inventory_audit
-north
-​
+```text
+inventory_audit_north
+= σ(site='north')(inventory_audit)
 
-=σ(site=
-′
-north
-′
-)(inventory_audit)
-inventory_audit
-central
-​
+inventory_audit_central
+= σ(site='central')(inventory_audit)
 
-=σ(site=
-′
-central
-′
-)(inventory_audit)
-inventory_audit
-south
-​
+inventory_audit_south
+= σ(site='south')(inventory_audit)
+```
 
-=σ(site=
-′
-south
-′
-)(inventory_audit)
-3.1.2. Kiểm tra tính đúng của phân mảnh
+### 3.1.2. Kiểm tra tính đúng của phân mảnh
 
 Theo lý thuyết cơ sở dữ liệu phân tán, chiến lược phân mảnh cần thỏa mãn ba tính chất quan trọng:
 
-1. Completeness (Tính đầy đủ)
+#### 1. Completeness (Tính đầy đủ)
 
 Mọi dữ liệu của bảng gốc phải xuất hiện ở ít nhất một mảnh.
 
 Ví dụ:
 
-customers=customers
-north
-​
-
-∪customers
-central
-​
-
-∪customers
-south
-​
+```text
+customers
+=
+customers_north
+∪
+customers_central
+∪
+customers_south
+```
 
 Điều này đảm bảo không có dữ liệu bị mất khi phân mảnh.
 
-2. Reconstruction (Khả năng tái tạo)
+#### 2. Reconstruction (Khả năng tái tạo)
 
 Có thể tái tạo bảng gốc bằng cách hợp các mảnh dữ liệu lại.
 
 Ví dụ:
 
-orders=orders
-north
-​
-
-∪orders
-central
-​
-
-∪orders
-south
-​
+```text
+orders
+=
+orders_north
+∪
+orders_central
+∪
+orders_south
+```
 
 Trong hệ thống demo, FastAPI coordinator thực hiện việc tổng hợp dữ liệu này khi cần truy vấn toàn hệ thống.
 
-3. Disjointness (Tính không giao nhau)
+#### 3. Disjointness (Tính không giao nhau)
 
 Một bản ghi chỉ thuộc đúng một mảnh dữ liệu.
 
@@ -282,15 +197,17 @@ Ví dụ:
 
 Mỗi order chỉ có một:
 
+```text
 primary_site
+```
 
 nên không thể tồn tại đồng thời ở nhiều site.
 
 Điều này giúp:
 
-tránh dữ liệu trùng lặp
-giảm chi phí đồng bộ
-giảm nguy cơ inconsistency
+- tránh dữ liệu trùng lặp
+- giảm chi phí đồng bộ
+- giảm nguy cơ inconsistency
 
 ## 3.2. Nhân bản dữ liệu dùng chung
 
