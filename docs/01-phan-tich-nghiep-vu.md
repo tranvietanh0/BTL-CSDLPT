@@ -317,6 +317,7 @@ Ví dụ:
 
 ```text
 warehouse_north   → 2
+warehouse_central → 0
 warehouse_south   → 8
 ```
 
@@ -441,15 +442,7 @@ reserved_qty: 0 → 5
 
 Request B đến sau.
 
-Do row đang bị khóa bởi request A nên:
-
-```text
-Request B phải chờ
-```
-
-đến khi transaction của A hoàn tất.
-
-Sau khi đọc lại tồn kho:
+Do row đang bị khóa bởi request A nên request B phải chờ đến khi transaction của A hoàn tất. Sau khi đọc lại tồn kho:
 
 ```text
 available_qty = 0
@@ -460,10 +453,8 @@ Request B sẽ bị từ chối.
 Điều này giúp tránh tình trạng:
 
 ```text
-overselling
+overselling (tồn kho âm hoặc bán vượt số lượng thật)
 ```
-
-(tồn kho âm hoặc bán vượt số lượng thật).
 
 ---
 
@@ -491,14 +482,14 @@ Ví dụ ban đầu:
 Khách đặt:
 
 ```text
-LAP-01 x4
+LAP-01 x2
 ```
 
 Hệ thống chưa commit ngay mà thực hiện reserve:
 
 ```text
-available_qty: 10 → 6
-reserved_qty: 0 → 4
+available_qty: 10 → 8
+reserved_qty: 0 → 2
 ```
 
 Ý nghĩa:
@@ -514,7 +505,7 @@ reserved_qty: 0 → 4
 Nếu order được tạo thành công:
 
 ```text
-reserved_qty: 4 → 0
+reserved_qty: 2 → 0
 ```
 
 và phần inventory chính thức được xem là đã xuất kho.
@@ -536,9 +527,9 @@ LAP-01 x10
 Reserve:
 
 ```text
-north = 4
-central = 2
-south = 4
+north = 2
+central = 0
+south = 8
 ```
 
 Nhưng trong lúc xử lý:
@@ -550,7 +541,7 @@ south reserve thất bại
 Nếu không xử lý rollback:
 
 ```text
-north và central vẫn bị giữ hàng
+north vẫn bị giữ hàng
 ```
 
 sẽ dẫn tới:
@@ -568,18 +559,6 @@ release reserve
 ```
 
 ở các site đã reserve trước đó.
-
-Ví dụ:
-
-```text
-north:
-available_qty: 6 → 10
-reserved_qty: 4 → 0
-
-central:
-available_qty: 3 → 5
-reserved_qty: 2 → 0
-```
 
 Kết quả:
 
@@ -599,9 +578,9 @@ Ví dụ log:
 
 | sku    | action  | qty | before | after |
 | ------ | ------- | --- | ------ | ----- |
-| LAP-01 | reserve | 4   | 10     | 6     |
-| LAP-01 | commit  | 4   | 6      | 6     |
-| LAP-01 | release | 4   | 6      | 10    |
+| LAP-01 | reserve | 2   | 10     | 8     |
+| LAP-01 | commit  | 2   | 8      | 8     |
+| LAP-01 | release | 2   | 8      | 10    |
 
 Mục tiêu:
 
@@ -614,10 +593,8 @@ Mục tiêu:
 
 ## 6. Giá trị của hệ thống demo đối với bài tập
 
-Bản demo hiện tại có giá trị tốt cho đồ án vì thể hiện được ba lớp khác nhau:
+Bản demo thể hiện được ba lớp khác nhau:
 
 1. **Lớp dữ liệu**: có lược đồ toàn cục, dữ liệu nhân bản và dữ liệu phân mảnh
 2. **Lớp điều phối**: FastAPI làm coordinator gom và phân phối dữ liệu giữa các site
 3. **Lớp trình diễn**: frontend React hiển thị rõ các flow phân tán một cách trực quan
-
-Nhờ đó, đồ án không chỉ dừng ở mức “thiết kế lý thuyết”, mà còn có một bản minh họa có thể chạy và thuyết trình rõ ràng.
