@@ -160,21 +160,18 @@ flowchart LR
 
 ### Giải thích luồng đặt hàng đa kho
 
-Ví dụ tình huống:
-
+Lấy tình huống ở trên làm ví dụ:
 Khách hàng miền Bắc đặt:
 
 ```text
 LAP-01 x10
 ```
 
-Trong khi kho `north` không đủ số lượng.
-
-Hệ thống sẽ thực hiện các bước sau:
+Trong khi kho `north` không đủ số lượng. Hệ thống sẽ thực hiện các bước sau:
 
 #### Bước 1. Tiếp nhận yêu cầu đặt hàng
 
-Coordinator nhận request tạo đơn hàng:
+Coordinator (điều phối viên) nhận request tạo đơn hàng:
 
 ```text
 customer = miền Bắc
@@ -203,13 +200,13 @@ available_qty(LAP-01)
 Ví dụ kết quả:
 
 ```text
-north = 4
+north = 2
 ```
 
 Do:
 
 ```text
-4 < 10
+2 < 10
 ```
 
 nên site `north` không đủ khả năng đáp ứng toàn bộ đơn hàng.
@@ -221,7 +218,7 @@ nên site `north` không đủ khả năng đáp ứng toàn bộ đơn hàng.
 Hệ thống tính:
 
 ```text
-remaining = 10 - 4 = 6
+remaining = 10 - 2 = 8
 ```
 
 Số lượng thiếu cần lấy từ site khác.
@@ -238,16 +235,16 @@ Coordinator tiếp tục gửi request tới:
 Ví dụ kết quả:
 
 ```text
-central = 2
+central = 0
 south = 8
 ```
 
 Coordinator thực hiện tổng hợp:
 
 ```text
-north  = 4
-central = 2
-south  = 4
+north  = 2
+central = 0
+south  = 8
 ----------------
 total = 10
 ```
@@ -271,9 +268,9 @@ reserve stock
 Ví dụ:
 
 ```text
-north  reserve 4
-central reserve 2
-south reserve 4
+north  reserve 2
+central reserve 0
+south reserve 8
 ```
 
 Trong bước này:
@@ -319,9 +316,8 @@ nhưng `order_items` sẽ chứa thông tin fulfillment theo nhiều warehouse k
 Ví dụ:
 
 ```text
-warehouse_north   → 4
-warehouse_central → 2
-warehouse_south   → 4
+warehouse_north   → 2
+warehouse_south   → 8
 ```
 
 ---
@@ -336,9 +332,8 @@ Ví dụ:
 order_id = ORD001
 sku = LAP-01
 
-north   → 4
-central → 2
-south   → 4
+north   → 2
+south   → 8
 ```
 
 Mục đích:
@@ -356,8 +351,6 @@ Nếu mọi site reserve thành công:
 ```text
 commit
 ```
-
-được thực hiện.
 
 Kết quả:
 
@@ -393,16 +386,231 @@ release / rollback reserve
 
 ## 5.3. Đồng thời và nhất quán
 
-Đây là tình huống kỹ thuật quan trọng để chứng minh hệ thống phân tán không chỉ “truy vấn được”, mà còn “giữ được tính đúng đắn dữ liệu”.
+Đây là tình huống chứng minh hệ thống phân tán không chỉ “truy vấn được”, mà còn “giữ được tính đúng đắn dữ liệu”.
 
 Hai khách có thể cùng đặt một sản phẩm tại cùng một thời điểm. Nếu không khóa đúng bản ghi tồn kho, cả hai transaction có thể cùng đọc một giá trị tồn ban đầu và cùng trừ đi, dẫn tới âm kho.
 
-Trong hệ thống demo, điều này được xử lý bằng:
+Trong hệ thống demo, tính nhất quán tồn kho được đảm bảo bằng nhiều cơ chế phối hợp với nhau thay vì chỉ dựa trên một transaction đơn lẻ.
 
-- `SELECT ... FOR UPDATE`
-- cơ chế `available_qty` / `reserved_qty`
-- release phần đã reserve nếu request không đi tới commit thành công
-- ghi `inventory_audit` để chứng minh từng bước thay đổi
+### 1. `SELECT ... FOR UPDATE`
+
+Khi một request đặt hàng bắt đầu reserve tồn kho, hệ thống không đọc inventory theo kiểu thông thường mà sử dụng:
+
+```text
+SELECT ... FOR UPDATE
+```
+
+để khóa row inventory tương ứng.
+
+Ví dụ:
+
+Khách A và khách B cùng lúc đặt:
+
+```text
+LAP-01 x5
+```
+
+trong khi kho chỉ còn:
+
+```text
+available_qty = 5
+```
+
+Luồng xử lý:
+
+#### Request A
+
+Request A vào trước:
+
+```text
+SELECT ... FOR UPDATE
+```
+
+Row inventory bị khóa.
+
+Request A reserve thành công:
+
+```text
+available_qty: 5 → 0
+reserved_qty: 0 → 5
+```
+
+---
+
+#### Request B
+
+Request B đến sau.
+
+Do row đang bị khóa bởi request A nên:
+
+```text
+Request B phải chờ
+```
+
+đến khi transaction của A hoàn tất.
+
+Sau khi đọc lại tồn kho:
+
+```text
+available_qty = 0
+```
+
+Request B sẽ bị từ chối.
+
+Điều này giúp tránh tình trạng:
+
+```text
+overselling
+```
+
+(tồn kho âm hoặc bán vượt số lượng thật).
+
+---
+
+### 2. Cơ chế `available_qty` và `reserved_qty`
+
+Hệ thống không trừ tồn kho ngay khi khách vừa bấm đặt hàng.
+
+Thay vào đó inventory được chia thành hai trạng thái:
+
+| Trường          | Ý nghĩa                               |
+| --------------- | ------------------------------------- |
+| `available_qty` | số lượng còn có thể bán               |
+| `reserved_qty`  | số lượng đã giữ chỗ nhưng chưa commit |
+
+Ví dụ ban đầu:
+
+| sku    | available_qty | reserved_qty |
+| ------ | ------------- | ------------ |
+| LAP-01 | 10            | 0            |
+
+---
+
+#### Khi reserve thành công
+
+Khách đặt:
+
+```text
+LAP-01 x4
+```
+
+Hệ thống chưa commit ngay mà thực hiện reserve:
+
+```text
+available_qty: 10 → 6
+reserved_qty: 0 → 4
+```
+
+Ý nghĩa:
+
+- hàng đã được giữ cho request hiện tại
+- request khác không thể lấy phần hàng đó nữa
+- nhưng order vẫn chưa hoàn tất
+
+---
+
+#### Khi commit thành công
+
+Nếu order được tạo thành công:
+
+```text
+reserved_qty: 4 → 0
+```
+
+và phần inventory chính thức được xem là đã xuất kho.
+
+---
+
+### 3. Release nếu request thất bại
+
+Trong quá trình xử lý đa kho, có thể xảy ra lỗi.
+
+Ví dụ:
+
+Khách đặt:
+
+```text
+LAP-01 x10
+```
+
+Reserve:
+
+```text
+north = 4
+central = 2
+south = 4
+```
+
+Nhưng trong lúc xử lý:
+
+```text
+south reserve thất bại
+```
+
+Nếu không xử lý rollback:
+
+```text
+north và central vẫn bị giữ hàng
+```
+
+sẽ dẫn tới:
+
+```text
+stock bị treo
+```
+
+(không ai mua được nhưng order không tồn tại).
+
+Do đó coordinator thực hiện:
+
+```text
+release reserve
+```
+
+ở các site đã reserve trước đó.
+
+Ví dụ:
+
+```text
+north:
+available_qty: 6 → 10
+reserved_qty: 4 → 0
+
+central:
+available_qty: 3 → 5
+reserved_qty: 2 → 0
+```
+
+Kết quả:
+
+toàn bộ tồn kho trở về trạng thái ban đầu.
+
+---
+
+### 4. Ghi `inventory_audit`
+
+Mọi thay đổi tồn kho đều được ghi vào:
+
+```text
+inventory_audit
+```
+
+Ví dụ log:
+
+| sku    | action  | qty | before | after |
+| ------ | ------- | --- | ------ | ----- |
+| LAP-01 | reserve | 4   | 10     | 6     |
+| LAP-01 | commit  | 4   | 6      | 6     |
+| LAP-01 | release | 4   | 6      | 10    |
+
+Mục tiêu:
+
+- chứng minh transaction đã diễn ra
+- dễ debug lỗi
+- hỗ trợ kiểm tra consistency
+- minh họa quá trình reserve/commit/release khi thuyết trình
+
+Điều này đặc biệt quan trọng trong hệ phân tán vì nhiều site có thể cùng tham gia xử lý một đơn hàng.
 
 ## 6. Giá trị của hệ thống demo đối với bài tập
 
