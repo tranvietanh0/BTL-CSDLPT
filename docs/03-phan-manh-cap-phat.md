@@ -324,11 +324,17 @@ flowchart LR
 
 ## 7. Liên hệ với code hiện tại
 
-Phân mảnh trong bản demo không được cài bằng middleware replication tự động mà được mô phỏng bằng:
+Việc phân mảnh dữ liệu trong bản demo không được triển khai bằng distributed DBMS tự động mà được mô phỏng bằng:
 
 - 3 database PostgreSQL độc lập
 - mỗi database có schema giống nhau
-- dữ liệu seed khác nhau ở phần cục bộ
+- dữ liệu cục bộ được seed khác nhau theo site
+- dữ liệu dùng chung (`products`, `categories`, `warehouses`) được seed giống nhau
 - FastAPI coordinator thực hiện truy vấn và điều phối giữa các site
 
-Cách này phù hợp với đồ án vì dễ kiểm soát, dễ minh họa và đủ rõ để giải thích lý thuyết phân tán.
+Cách tiếp cận này phù hợp với đồ án vì:
+
+- dễ kiểm soát
+- dễ minh họa logic phân tán
+- dễ đối chiếu giữa code và dữ liệu thực tế
+- vẫn thể hiện rõ khái niệm fragmentation và allocation trong hệ phân tán
