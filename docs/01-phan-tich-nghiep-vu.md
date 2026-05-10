@@ -11,6 +11,7 @@ Doanh nghiệp thương mại điện tử trong đề tài có nhiều kho hàn
 - chứng minh hệ thống vẫn nhất quán khi có nhiều giao dịch đồng thời
 
 Trong hệ thống demo hiện tại, ba site được mô phỏng là:
+
 - **north**: miền Bắc
 - **central**: miền Trung
 - **south**: miền Nam
@@ -20,6 +21,7 @@ Trong hệ thống demo hiện tại, ba site được mô phỏng là:
 Đề tài không chỉ yêu cầu tạo một cơ sở dữ liệu lưu trữ thông tin bán hàng, mà còn yêu cầu thể hiện rõ **đặc trưng của hệ quản trị cơ sở dữ liệu phân tán**. Vì vậy, mục tiêu của hệ thống bao gồm hai lớp:
 
 ### 2.1. Mục tiêu nghiệp vụ
+
 - quản lý sản phẩm và danh mục sản phẩm
 - quản lý thông tin kho hàng theo vùng
 - quản lý tồn kho tại từng kho
@@ -29,6 +31,7 @@ Trong hệ thống demo hiện tại, ba site được mô phỏng là:
 - hỗ trợ báo cáo phục vụ quản trị
 
 ### 2.2. Mục tiêu phân tán
+
 - phân bố dữ liệu theo site
 - nhân bản dữ liệu dùng chung để giảm truy vấn xuyên site
 - hỗ trợ truy vấn toàn hệ thống thông qua middleware
@@ -40,6 +43,7 @@ Trong hệ thống demo hiện tại, ba site được mô phỏng là:
 Trong phiên bản demo, hệ thống sử dụng các thực thể sau:
 
 ### 3.1. Dữ liệu dùng chung (replicated data)
+
 - **categories**: lưu mã danh mục, tên danh mục, mô tả
 - **products**: lưu SKU, tên sản phẩm, giá, danh mục
 - **warehouses**: lưu mã kho, site sở hữu, tên kho, thành phố, vùng
@@ -47,8 +51,9 @@ Trong phiên bản demo, hệ thống sử dụng các thực thể sau:
 Đây là nhóm dữ liệu ít thay đổi nhưng được đọc rất thường xuyên ở mọi site.
 
 ### 3.2. Dữ liệu cục bộ theo site (fragmented data)
+
 - **customers**: khách hàng được phân theo vùng
-- **inventory**: tồn kho theo từng kho và SKU
+- **inventory**: tồn kho theo từng kho và SKU (mã sản phẩm)
 - **orders**: thông tin đơn hàng gắn với site xử lý chính
 - **order_items**: chi tiết sản phẩm của đơn hàng
 - **allocation_logs**: log phân bổ hàng từ các kho khác nhau
@@ -57,27 +62,32 @@ Trong phiên bản demo, hệ thống sử dụng các thực thể sau:
 ## 4. Chức năng nghiệp vụ chính
 
 ### 4.1. Quản lý danh mục và sản phẩm
+
 - xem danh sách sản phẩm
 - xem chi tiết sản phẩm theo SKU
 - phân loại sản phẩm theo danh mục
 
 ### 4.2. Quản lý kho và tồn kho
+
 - xem số lượng tồn tại từng kho
 - xem tổng tồn trên toàn hệ thống
 - phát hiện bản ghi tồn thấp hơn hoặc bằng ngưỡng reorder
 
 ### 4.3. Quản lý khách hàng và đơn hàng
+
 - tạo đơn hàng theo mã khách hàng
 - xác định site ưu tiên theo vùng khách hàng
 - tạo đơn hàng ngay cả khi cần lấy hàng từ nhiều site
 - truy xuất lại chi tiết đơn và allocation sau khi tạo
 
 ### 4.4. Báo cáo quản trị
+
 - doanh thu theo site
 - top sản phẩm bán chạy
 - đơn hàng được phân bổ từ nhiều kho
 
 ### 4.5. Mô phỏng đồng thời
+
 - hai khách cùng đặt một SKU trong cùng thời điểm
 - hệ thống phải đảm bảo không âm tồn kho
 - request thất bại phải được rollback đúng cách
@@ -85,15 +95,16 @@ Trong phiên bản demo, hệ thống sử dụng các thực thể sau:
 ## 5. Tình huống phân tán tiêu biểu
 
 ## 5.1. Tra cứu tồn kho toàn hệ thống
-Đây là tình huống cho thấy rõ nhất ý nghĩa của hệ phân tán.
 
 Người dùng nhập một SKU, ví dụ `LAP-01`. Middleware sẽ:
+
 1. gửi truy vấn tới 3 site
 2. đọc tồn kho cục bộ từ từng site
 3. tổng hợp kết quả về một phản hồi thống nhất
 4. trả về tổng tồn, tổng reserved và chi tiết từng kho
 
 ### Sơ đồ luồng tra cứu tồn kho
+
 ```mermaid
 sequenceDiagram
     actor User as Người dùng
@@ -115,21 +126,23 @@ sequenceDiagram
     FE-->>User: Hiển thị tồn kho theo site
 ```
 
-## 5.2. Đặt hàng khi kho gần nhất không đủ
-Đây là tình huống thể hiện rõ nhất cơ chế phân bổ đa kho.
+## 5.2. Đặt hàng khi kho gần nhất không đủ (cơ chế phân bổ đa kho)
 
 Ví dụ khách ở miền Bắc đặt `LAP-01` số lượng `10`:
+
 - kho miền Bắc chỉ còn `2`
 - kho miền Trung còn `0`
 - kho miền Nam còn `8`
 
 Khi đó middleware sẽ:
+
 1. ưu tiên site north trước
 2. lấy tiếp từ south để đủ số lượng
 3. tạo đơn hàng với `primary_site_code = north`
 4. ghi allocation logs cho cả north và south
 
 ### Sơ đồ luồng đặt hàng đa kho
+
 ```mermaid
 flowchart LR
     A[Khách miền Bắc đặt LAP-01 x10] --> B[Kiểm tra north]
@@ -145,12 +158,247 @@ flowchart LR
     K --> L[Commit giao dịch]
 ```
 
+### Giải thích luồng đặt hàng đa kho
+
+Ví dụ tình huống:
+
+Khách hàng miền Bắc đặt:
+
+```text
+LAP-01 x10
+```
+
+Trong khi kho `north` không đủ số lượng.
+
+Hệ thống sẽ thực hiện các bước sau:
+
+#### Bước 1. Tiếp nhận yêu cầu đặt hàng
+
+Coordinator nhận request tạo đơn hàng:
+
+```text
+customer = miền Bắc
+sku = LAP-01
+quantity = 10
+```
+
+Do khách thuộc miền Bắc nên:
+
+```text
+primary_site = north
+```
+
+Site `north` sẽ đóng vai trò xử lý chính.
+
+---
+
+#### Bước 2. Kiểm tra tồn kho local tại north
+
+Coordinator gửi truy vấn tới site `north`:
+
+```text
+available_qty(LAP-01)
+```
+
+Ví dụ kết quả:
+
+```text
+north = 4
+```
+
+Do:
+
+```text
+4 < 10
+```
+
+nên site `north` không đủ khả năng đáp ứng toàn bộ đơn hàng.
+
+---
+
+#### Bước 3. Tính phần còn thiếu
+
+Hệ thống tính:
+
+```text
+remaining = 10 - 4 = 6
+```
+
+Số lượng thiếu cần lấy từ site khác.
+
+---
+
+#### Bước 4. Kiểm tra tồn kho ở các site còn lại
+
+Coordinator tiếp tục gửi request tới:
+
+- `central`
+- `south`
+
+Ví dụ kết quả:
+
+```text
+central = 2
+south = 8
+```
+
+Coordinator thực hiện tổng hợp:
+
+```text
+north  = 4
+central = 2
+south  = 4
+----------------
+total = 10
+```
+
+Kết quả:
+
+Đủ hàng để tạo đơn.
+
+---
+
+#### Bước 5. Reserve tồn kho tại từng site
+
+Trước khi commit đơn hàng, hệ thống thực hiện:
+
+```text
+reserve stock
+```
+
+ở từng site để tránh race condition.
+
+Ví dụ:
+
+```text
+north  reserve 4
+central reserve 2
+south reserve 4
+```
+
+Trong bước này:
+
+```text
+SELECT ... FOR UPDATE
+```
+
+được sử dụng để khóa row inventory đang cập nhật.
+
+Mục tiêu:
+
+- tránh 2 request cùng lấy một lượng hàng
+- tránh âm tồn kho
+- đảm bảo nhất quán
+
+---
+
+#### Bước 6. Tạo order và order_items
+
+Sau khi reserve thành công:
+
+Coordinator tạo:
+
+```text
+orders
+```
+
+và:
+
+```text
+order_items
+```
+
+Order vẫn thuộc:
+
+```text
+primary_site = north
+```
+
+nhưng `order_items` sẽ chứa thông tin fulfillment theo nhiều warehouse khác nhau.
+
+Ví dụ:
+
+```text
+warehouse_north   → 4
+warehouse_central → 2
+warehouse_south   → 4
+```
+
+---
+
+#### Bước 7. Ghi allocation_logs
+
+Hệ thống ghi log phân bổ tồn kho:
+
+Ví dụ:
+
+```text
+order_id = ORD001
+sku = LAP-01
+
+north   → 4
+central → 2
+south   → 4
+```
+
+Mục đích:
+
+- audit
+- debug
+- theo dõi split-order đa kho
+
+---
+
+#### Bước 8. Commit giao dịch
+
+Nếu mọi site reserve thành công:
+
+```text
+commit
+```
+
+được thực hiện.
+
+Kết quả:
+
+- tồn kho bị trừ
+- order được tạo
+- allocation log được ghi
+
+---
+
+#### Trường hợp lỗi
+
+Nếu một site reserve thất bại:
+
+Ví dụ:
+
+```text
+south hết hàng trong lúc xử lý
+```
+
+Coordinator thực hiện:
+
+```text
+release / rollback reserve
+```
+
+ở các site đã giữ hàng trước đó.
+
+Điều này giúp:
+
+- không âm tồn kho
+- tránh giữ stock bị treo
+- đảm bảo tính nhất quán của hệ thống
+
 ## 5.3. Đồng thời và nhất quán
+
 Đây là tình huống kỹ thuật quan trọng để chứng minh hệ thống phân tán không chỉ “truy vấn được”, mà còn “giữ được tính đúng đắn dữ liệu”.
 
 Hai khách có thể cùng đặt một sản phẩm tại cùng một thời điểm. Nếu không khóa đúng bản ghi tồn kho, cả hai transaction có thể cùng đọc một giá trị tồn ban đầu và cùng trừ đi, dẫn tới âm kho.
 
 Trong hệ thống demo, điều này được xử lý bằng:
+
 - `SELECT ... FOR UPDATE`
 - cơ chế `available_qty` / `reserved_qty`
 - release phần đã reserve nếu request không đi tới commit thành công

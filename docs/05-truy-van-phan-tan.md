@@ -270,8 +270,6 @@ flowchart TD
 
 ## 5. Ý nghĩa học thuật của phần truy vấn phân tán
 
-Phần này chứng minh ba ý quan trọng của môn học:
-
 - dữ liệu phân tán không đồng nghĩa với việc người dùng phải thao tác rời rạc
 - middleware có thể đóng vai trò lớp logic toàn cục
 - bài toán phân tán không chỉ là lưu dữ liệu ở nhiều nơi mà còn là tổng hợp và ra quyết định từ nhiều nơi đó
