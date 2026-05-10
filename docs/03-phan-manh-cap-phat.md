@@ -5,6 +5,7 @@
 Trong hệ phân tán, không phải mọi dữ liệu đều nên đặt ở mọi nơi. Nếu toàn bộ dữ liệu được nhân bản toàn phần, hệ thống sẽ tốn chi phí đồng bộ rất lớn. Nếu ngược lại mọi dữ liệu đều chỉ tồn tại ở một chỗ, thì truy vấn xuyên site sẽ xảy ra thường xuyên và làm giảm hiệu năng.
 
 Vì vậy, đồ án này lựa chọn mô hình cân bằng:
+
 - **nhân bản dữ liệu dùng chung**
 - **phân mảnh dữ liệu giao dịch theo site**
 
@@ -12,16 +13,18 @@ Vì vậy, đồ án này lựa chọn mô hình cân bằng:
 
 Ba site được mô phỏng như sau:
 
-| Site | Khu vực | Vai trò |
-|------|---------|---------|
-| north | Miền Bắc | Xử lý kho và khách hàng miền Bắc |
+| Site    | Khu vực    | Vai trò                            |
+| ------- | ---------- | ---------------------------------- |
+| north   | Miền Bắc   | Xử lý kho và khách hàng miền Bắc   |
 | central | Miền Trung | Xử lý kho và khách hàng miền Trung |
-| south | Miền Nam | Xử lý kho và khách hàng miền Nam |
+| south   | Miền Nam   | Xử lý kho và khách hàng miền Nam   |
 
 ## 3. Chiến lược phân mảnh
 
 ## 3.1. Phân mảnh ngang theo site
+
 Áp dụng cho:
+
 - `customers`
 - `inventory`
 - `orders`
@@ -30,13 +33,16 @@ Ba site được mô phỏng như sau:
 - `inventory_audit`
 
 ### Ý tưởng
+
 Mỗi site giữ phần dữ liệu mà nó sở hữu:
+
 - khách hàng của vùng đó
 - tồn kho của kho thuộc site đó
 - đơn hàng mà site đó xử lý chính
 - các log nghiệp vụ liên quan đến site đó
 
 ### Ví dụ trực quan
+
 ```mermaid
 flowchart TD
     A[Global orders] --> B[orders_north]
@@ -48,19 +54,262 @@ flowchart TD
     E --> H[inventory_south]
 ```
 
+3.1.1. Biểu thức phân mảnh ngang hình thức
+
+Các bảng giao dịch trong hệ thống được phân mảnh ngang (horizontal fragmentation) theo vùng địa lý hoặc site xử lý.
+
+Customers
+
+Khách hàng được phân theo vùng:
+
+customers
+north
+​
+
+=σ(region=
+′
+north
+′
+)(customers)
+customers
+central
+​
+
+=σ(region=
+′
+central
+′
+)(customers)
+customers
+south
+​
+
+=σ(region=
+′
+south
+′
+)(customers)
+
+Ý nghĩa:
+
+khách miền Bắc lưu tại site north
+khách miền Trung lưu tại site central
+khách miền Nam lưu tại site south
+Inventory
+
+Tồn kho được phân theo warehouse thuộc site:
+
+inventory
+north
+​
+
+=σ(site=
+′
+north
+′
+)(inventory)
+inventory
+central
+​
+
+=σ(site=
+′
+central
+′
+)(inventory)
+inventory
+south
+​
+
+=σ(site=
+′
+south
+′
+)(inventory)
+
+Ý nghĩa:
+
+kho Hà Nội thuộc north
+kho Đà Nẵng thuộc central
+kho TP.HCM thuộc south
+Orders
+
+Đơn hàng được phân theo site xử lý chính:
+
+orders
+north
+​
+
+=σ(primary_site=
+′
+north
+′
+)(orders)
+orders
+central
+​
+
+=σ(primary_site=
+′
+central
+′
+)(orders)
+orders
+south
+​
+
+=σ(primary_site=
+′
+south
+′
+)(orders)
+
+Ý nghĩa:
+
+Mỗi đơn hàng chỉ thuộc một primary_site, tránh trùng dữ liệu giữa các site.
+
+Allocation logs
+
+Các log cấp phát được lưu theo site phát sinh:
+
+allocation_logs
+north
+​
+
+=σ(site=
+′
+north
+′
+)(allocation_logs)
+allocation_logs
+central
+​
+
+=σ(site=
+′
+central
+′
+)(allocation_logs)
+allocation_logs
+south
+​
+
+=σ(site=
+′
+south
+′
+)(allocation_logs)
+Inventory audit
+
+Audit tồn kho được lưu tại site nơi transaction diễn ra:
+
+inventory_audit
+north
+​
+
+=σ(site=
+′
+north
+′
+)(inventory_audit)
+inventory_audit
+central
+​
+
+=σ(site=
+′
+central
+′
+)(inventory_audit)
+inventory_audit
+south
+​
+
+=σ(site=
+′
+south
+′
+)(inventory_audit)
+3.1.2. Kiểm tra tính đúng của phân mảnh
+
+Theo lý thuyết cơ sở dữ liệu phân tán, chiến lược phân mảnh cần thỏa mãn ba tính chất quan trọng:
+
+1. Completeness (Tính đầy đủ)
+
+Mọi dữ liệu của bảng gốc phải xuất hiện ở ít nhất một mảnh.
+
+Ví dụ:
+
+customers=customers
+north
+​
+
+∪customers
+central
+​
+
+∪customers
+south
+​
+
+Điều này đảm bảo không có dữ liệu bị mất khi phân mảnh.
+
+2. Reconstruction (Khả năng tái tạo)
+
+Có thể tái tạo bảng gốc bằng cách hợp các mảnh dữ liệu lại.
+
+Ví dụ:
+
+orders=orders
+north
+​
+
+∪orders
+central
+​
+
+∪orders
+south
+​
+
+Trong hệ thống demo, FastAPI coordinator thực hiện việc tổng hợp dữ liệu này khi cần truy vấn toàn hệ thống.
+
+3. Disjointness (Tính không giao nhau)
+
+Một bản ghi chỉ thuộc đúng một mảnh dữ liệu.
+
+Ví dụ:
+
+Mỗi order chỉ có một:
+
+primary_site
+
+nên không thể tồn tại đồng thời ở nhiều site.
+
+Điều này giúp:
+
+tránh dữ liệu trùng lặp
+giảm chi phí đồng bộ
+giảm nguy cơ inconsistency
+
 ## 3.2. Nhân bản dữ liệu dùng chung
+
 Áp dụng cho:
+
 - `categories`
 - `products`
 - `warehouses`
 
 ### Lý do
+
 Các bảng này:
+
 - được đọc thường xuyên
 - thay đổi ít
 - cần xuất hiện ở mọi site để tránh join xuyên site
 
 Điều này giúp:
+
 - tra cứu sản phẩm nhanh
 - hiển thị frontend nhất quán
 - giảm độ phức tạp khi coordinator cần ghép dữ liệu
@@ -68,18 +317,21 @@ Các bảng này:
 ## 4. Cấp phát dữ liệu thực tế trong hệ thống demo
 
 ### Site north
+
 - khách hàng miền Bắc
 - tồn kho kho Hà Nội
 - đơn hàng xử lý chính tại north
 - log allocation và audit phát sinh tại north
 
 ### Site central
+
 - khách hàng miền Trung
 - tồn kho kho Đà Nẵng
 - đơn hàng xử lý chính tại central
 - log allocation và audit phát sinh tại central
 
 ### Site south
+
 - khách hàng miền Nam
 - tồn kho kho TP.HCM
 - đơn hàng xử lý chính tại south
@@ -88,7 +340,9 @@ Các bảng này:
 ## 5. Lý do lựa chọn chiến lược này
 
 ## 5.1. Tăng locality of reference
+
 Phần lớn thao tác vận hành hằng ngày diễn ra ở phạm vi cục bộ của một site. Ví dụ:
+
 - đọc tồn kho của kho địa phương
 - tạo đơn hàng cho khách hàng trong vùng
 - cập nhật tồn kho của kho đó
@@ -96,20 +350,25 @@ Phần lớn thao tác vận hành hằng ngày diễn ra ở phạm vi cục b�
 Do đó, việc giữ các bảng giao dịch ở site sở hữu dữ liệu giúp giảm truy cập từ xa.
 
 ## 5.2. Giảm chi phí join phân tán
+
 Nhờ nhân bản `products`, `categories`, `warehouses`, frontend và middleware có thể:
+
 - hiển thị tên sản phẩm
 - hiển thị tên kho
 - hiển thị site
-mà không cần thực hiện join xuyên site mỗi lần tra cứu.
+  mà không cần thực hiện join xuyên site mỗi lần tra cứu.
 
 ## 5.3. Dễ giải thích khi demo
+
 Cấu trúc này rất phù hợp với đồ án vì:
+
 - logic phân mảnh rõ
 - logic nhân bản rõ
 - dễ vẽ sơ đồ
 - dễ chứng minh vì có thể chỉ thẳng dữ liệu nào là local, dữ liệu nào là shared
 
 ## 6. Sơ đồ phân mảnh và cấp phát
+
 ```mermaid
 flowchart LR
     subgraph Shared[Replicated on all sites]
@@ -149,6 +408,7 @@ flowchart LR
 ## 7. Liên hệ với code hiện tại
 
 Phân mảnh trong bản demo không được cài bằng middleware replication tự động mà được mô phỏng bằng:
+
 - 3 database PostgreSQL độc lập
 - mỗi database có schema giống nhau
 - dữ liệu seed khác nhau ở phần cục bộ
