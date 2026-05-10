@@ -63,14 +63,9 @@ Các bảng giao dịch trong hệ thống được phân mảnh ngang (**horizo
 Khách hàng được phân theo vùng:
 
 ```text
-customers_north
-= σ(region='north')(customers)
-
-customers_central
-= σ(region='central')(customers)
-
-customers_south
-= σ(region='south')(customers)
+customers_north = σ(region='north')(customers)
+customers_central = σ(region='central')(customers)
+customers_south = σ(region='south')(customers)
 ```
 
 Ý nghĩa:
@@ -84,14 +79,9 @@ customers_south
 Tồn kho được phân theo warehouse thuộc site:
 
 ```text
-inventory_north
-= σ(site='north')(inventory)
-
-inventory_central
-= σ(site='central')(inventory)
-
-inventory_south
-= σ(site='south')(inventory)
+inventory_north = σ(site='north')(inventory)
+inventory_central = σ(site='central')(inventory)
+inventory_south = σ(site='south')(inventory)
 ```
 
 Ý nghĩa:
@@ -105,14 +95,11 @@ inventory_south
 Đơn hàng được phân theo site xử lý chính:
 
 ```text
-orders_north
-= σ(primary_site='north')(orders)
+orders_north = σ(primary_site='north')(orders)
 
-orders_central
-= σ(primary_site='central')(orders)
+orders_central = σ(primary_site='central')(orders)
 
-orders_south
-= σ(primary_site='south')(orders)
+orders_south = σ(primary_site='south')(orders)
 ```
 
 Ý nghĩa:
@@ -124,14 +111,9 @@ Mỗi đơn hàng chỉ thuộc một `primary_site`, tránh trùng dữ liệu 
 Các log cấp phát được lưu theo site phát sinh:
 
 ```text
-allocation_logs_north
-= σ(site='north')(allocation_logs)
-
-allocation_logs_central
-= σ(site='central')(allocation_logs)
-
-allocation_logs_south
-= σ(site='south')(allocation_logs)
+allocation_logs_north = σ(site='north')(allocation_logs)
+allocation_logs_central = σ(site='central')(allocation_logs)
+allocation_logs_south = σ(site='south')(allocation_logs)
 ```
 
 #### Inventory audit
@@ -139,14 +121,9 @@ allocation_logs_south
 Audit tồn kho được lưu tại site nơi transaction diễn ra:
 
 ```text
-inventory_audit_north
-= σ(site='north')(inventory_audit)
-
-inventory_audit_central
-= σ(site='central')(inventory_audit)
-
-inventory_audit_south
-= σ(site='south')(inventory_audit)
+inventory_audit_north = σ(site='north')(inventory_audit)
+inventory_audit_central = σ(site='central')(inventory_audit)
+inventory_audit_south = σ(site='south')(inventory_audit)
 ```
 
 ### 3.1.2. Kiểm tra tính đúng của phân mảnh
@@ -160,13 +137,7 @@ Mọi dữ liệu của bảng gốc phải xuất hiện ở ít nhất một m
 Ví dụ:
 
 ```text
-customers
-=
-customers_north
-∪
-customers_central
-∪
-customers_south
+customers = customers_north ∪ customers_central ∪ customers_south
 ```
 
 Điều này đảm bảo không có dữ liệu bị mất khi phân mảnh.
@@ -178,13 +149,7 @@ Có thể tái tạo bảng gốc bằng cách hợp các mảnh dữ liệu l�
 Ví dụ:
 
 ```text
-orders
-=
-orders_north
-∪
-orders_central
-∪
-orders_south
+orders = orders_north ∪ orders_central ∪ orders_south
 ```
 
 Trong hệ thống demo, FastAPI coordinator thực hiện việc tổng hợp dữ liệu này khi cần truy vấn toàn hệ thống.
