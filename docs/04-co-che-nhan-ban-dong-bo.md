@@ -22,7 +22,6 @@ Trong hệ thống demo hiện tại, các bảng sau được xem là dữ li�
 
 ## 3.1. categories
 
-- ít thay đổi
 - thường dùng để hiển thị và phân loại sản phẩm
 - không mang tính giao dịch thời gian thực
 
@@ -59,23 +58,24 @@ Các bảng sau không được nhân bản toàn phần:
 
 ## 5. Cơ chế đồng bộ trong bản demo
 
-Do đồ án tập trung vào minh họa logic phân tán, bản demo hiện tại không triển khai replication engine tự động giữa các site. Thay vào đó, đồng bộ được mô phỏng theo hướng:
+Tập trung vào minh họa logic phân tán, bản demo hiện tại không triển khai replication engine tự động giữa các site. Thay vào đó, đồng bộ được mô phỏng theo hướng:
 
 - dữ liệu dùng chung được seed giống nhau ở cả 3 site
 - coordinator luôn giả định catalog là nhất quán giữa các site
 - truy vấn toàn hệ thống được tạo bằng cách gọi từng site rồi tổng hợp kết quả
 - giao dịch cập nhật tồn kho được điều phối từ middleware
 
-Điều này phù hợp với mục tiêu môn học vì nhấn mạnh **logic phân tán**, không sa đà vào cấu hình replication chuyên sâu của một DBMS cụ thể.
+Điều này phù hợp vì nhấn mạnh **logic phân tán**, không sa đà vào cấu hình replication chuyên sâu của một DBMS cụ thể.
 
 ## 5.1. Chiến lược replication được sử dụng
 
 Trong hệ thống thực tế, replication thường được triển khai theo hai hướng:
 
-- synchronous replication
-- asynchronous replication
+- synchronous replication: cơ chế đồng bộ theo thời gian thực. Khi dữ liệu được ghi tại một site, transaction chỉ được xem là hoàn tất nếu các bản sao ở site khác cũng ghi thành công.
 
-Trong phạm vi đồ án, hệ thống sử dụng cách tiếp cận đơn giản hơn:
+- asynchronous replication: cơ chế đồng bộ không tức thời. Site chính sẽ ghi dữ liệu trước, sau đó việc cập nhật sang các site khác được thực hiện ở thời điểm sau.
+
+Trong phạm vi dự án, hệ thống sử dụng cách tiếp cận đơn giản hơn:
 
 ### Logical asynchronous replication (giả lập)
 
@@ -130,6 +130,31 @@ Ví dụ tra cứu tồn kho toàn hệ thống:
 - coordinator tổng hợp kết quả
 - không cần sao chép bảng `inventory` sang site khác
 
+### Sơ đồ truy vấn đọc phân tán
+
+```mermaid
+flowchart TD
+    A[Frontend gửi request<br/>GET /inventory/LAP-01/global]
+
+    A --> B[FastAPI Coordinator]
+
+    B --> C[Query site north]
+    B --> D[Query site central]
+    B --> E[Query site south]
+
+    C --> C1[Đọc inventory local<br/>SELECT sku = LAP-01]
+    D --> D1[Đọc inventory local<br/>SELECT sku = LAP-01]
+    E --> E1[Đọc inventory local<br/>SELECT sku = LAP-01]
+
+    C1 --> F[Partial result]
+    D1 --> F
+    E1 --> F
+
+    F --> G[Tổng hợp kết quả<br/>aggregate available + reserved]
+
+    G --> H[Unified response<br/>trả về cho frontend]
+```
+
 ## 7.2. Truy vấn ghi
 
 Ví dụ tạo đơn hàng từ nhiều kho:
@@ -139,6 +164,42 @@ Ví dụ tạo đơn hàng từ nhiều kho:
 - ghi allocation logs ở site tương ứng
 - commit thành công ở các site liên quan
 - nếu lỗi thì rollback và release phần đã reserve
+
+### Sơ đồ truy vấn ghi phân tán
+
+```mermaid
+flowchart TD
+    A[Frontend gửi request<br/>POST /orders]
+
+    A --> B[FastAPI Coordinator]
+
+    B --> C[Quote fulfillment<br/>xác định site cấp hàng]
+
+    C --> D[Reserve tồn kho<br/>ở từng site liên quan]
+
+    D --> E{Reserve thành công?}
+
+    E -- No --> F[Release phần đã reserve]
+    F --> G[Rollback request]
+    G --> H[Trả lỗi cho frontend]
+
+    E -- Yes --> I[Ghi orders<br/>ở site xử lý chính]
+
+    I --> J[Ghi order_items]
+
+    J --> K[Ghi allocation_logs<br/>ở từng site cấp hàng]
+
+    K --> L{Các bước thành công?}
+
+    L -- No --> M[Rollback transaction]
+    M --> N[Release reserved_qty<br/>khôi phục available_qty]
+    N --> H
+
+    L -- Yes --> O[Commit transaction<br/>ở các site liên quan]
+
+    O --> P[Inventory cập nhật thành công]
+    P --> Q[Trả order response]
+```
 
 ## 8. Ưu điểm và hạn chế của cách làm hiện tại
 
@@ -155,4 +216,4 @@ Ví dụ tạo đơn hàng từ nhiều kho:
 - chưa có cơ chế tự đồng bộ khi catalog thay đổi
 - chưa có distributed transaction manager hoàn chỉnh kiểu 2PC thực thụ
 
-Tuy vậy, với phạm vi đồ án, mô hình này là hợp lý vì vẫn làm nổi bật các khái niệm quan trọng của cơ sở dữ liệu phân tán.
+Tuy vậy, với phạm vi dự án, mô hình này là hợp lý vì vẫn làm nổi bật các khái niệm quan trọng của cơ sở dữ liệu phân tán.

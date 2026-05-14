@@ -4,7 +4,7 @@
 
 Trong hệ phân tán, không phải mọi dữ liệu đều nên đặt ở mọi nơi. Nếu toàn bộ dữ liệu được nhân bản toàn phần, hệ thống sẽ tốn chi phí đồng bộ rất lớn. Nếu ngược lại mọi dữ liệu đều chỉ tồn tại ở một chỗ, thì truy vấn xuyên site sẽ xảy ra thường xuyên và làm giảm hiệu năng.
 
-Vì vậy, đồ án này lựa chọn mô hình cân bằng:
+Vì vậy, cần lựa chọn mô hình cân bằng:
 
 - **nhân bản dữ liệu dùng chung**
 - **phân mảnh dữ liệu giao dịch theo site**
@@ -96,9 +96,7 @@ inventory_south = σ(site='south')(inventory)
 
 ```text
 orders_north = σ(primary_site='north')(orders)
-
 orders_central = σ(primary_site='central')(orders)
-
 orders_south = σ(primary_site='south')(orders)
 ```
 
@@ -170,9 +168,152 @@ nên không thể tồn tại đồng thời ở nhiều site.
 
 Điều này giúp:
 
-- tránh dữ liệu trùng lặp
-- giảm chi phí đồng bộ
-- giảm nguy cơ inconsistency
+### 1. Tránh dữ liệu trùng lặp
+
+Khi dữ liệu giao dịch được phân mảnh theo site, mỗi site chỉ lưu phần dữ liệu mà nó thực sự sở hữu thay vì sao chép toàn bộ dữ liệu hệ thống.
+
+Ví dụ:
+
+```text
+customers_north
+```
+
+chỉ chứa khách hàng miền Bắc.
+
+```text
+customers_south
+```
+
+chỉ chứa khách hàng miền Nam.
+
+Hệ thống không lưu:
+
+```text
+toàn bộ khách hàng của cả nước ở mọi site
+```
+
+Điều này giúp:
+
+- tránh lưu nhiều bản sao không cần thiết
+- giảm dung lượng database
+- giảm khả năng dữ liệu bị lệch giữa các site
+
+Ví dụ nếu khách hàng miền Bắc cập nhật số điện thoại:
+
+```text
+CUS-N-01
+```
+
+thì chỉ cần cập nhật tại:
+
+```text
+site north
+```
+
+thay vì phải cập nhật ở cả các site
+
+---
+
+#### 2. Giảm chi phí đồng bộ
+
+Nếu tất cả bảng đều được nhân bản toàn phần giữa các site, mọi thay đổi sẽ cần đồng bộ liên tục.
+
+Ví dụ:
+
+Mỗi lần tạo order:
+
+```text
+orders
+order_items
+inventory
+allocation_logs
+```
+
+đều phải replicate sang:
+
+```text
+north
+central
+south
+```
+
+Điều này làm tăng:
+
+- số lượng network message
+- transaction phân tán
+- độ trễ hệ thống
+
+Trong bài này, các bảng giao dịch được giữ local tại site xử lý nên:
+
+```text
+north chỉ cập nhật dữ liệu north
+south chỉ cập nhật dữ liệu south
+```
+
+Chỉ những bảng ít thay đổi như:
+
+```text
+products
+categories
+warehouses
+```
+
+mới được chia sẻ trên tất cả site. Do đó hệ thống giảm đáng kể chi phí đồng bộ.
+
+---
+
+#### 3. Giảm nguy cơ inconsistency
+
+`Inconsistency` xảy ra khi nhiều site giữ nhiều phiên bản khác nhau của cùng một dữ liệu.
+
+Ví dụ:
+
+Nếu bảng:
+
+```text
+inventory
+```
+
+được sao chép ở cả 3 site:
+
+```text
+north = còn 10
+south = còn 8
+central = còn 12
+```
+
+nhưng một site chưa kịp đồng bộ, hệ thống có thể đọc sai số lượng thật.
+
+Điều này dễ gây:
+
+- overselling
+- âm tồn kho
+- báo cáo sai
+
+Vì vậy trong hệ thống demo:
+
+```text
+inventory
+orders
+order_items
+allocation_logs
+```
+
+không được replicate toàn phần mà chỉ tồn tại tại site sở hữu.
+
+Người dùng vẫn nhìn thấy dữ liệu toàn cục thông qua:
+
+```text
+FastAPI coordinator
+```
+
+là lớp tổng hợp kết quả từ nhiều site.
+
+Nhờ đó:
+
+- dữ liệu local luôn là nguồn sự thật (source of truth)
+- hạn chế xung đột cập nhật
+- giảm rủi ro dữ liệu không nhất quán
 
 ## 3.2. Nhân bản dữ liệu dùng chung
 
@@ -240,9 +381,7 @@ Nhờ nhân bản `products`, `categories`, `warehouses`, frontend và middlewar
 - hiển thị site
   mà không cần thực hiện join xuyên site mỗi lần tra cứu.
 
-## 5.3. Dễ giải thích khi demo
-
-Cấu trúc này rất phù hợp với đồ án vì:
+## 5.3. Thuận tiện cho việc demo
 
 - logic phân mảnh rõ
 - logic nhân bản rõ
@@ -296,10 +435,3 @@ Việc phân mảnh dữ liệu trong bản demo không được triển khai b�
 - dữ liệu cục bộ được seed khác nhau theo site
 - dữ liệu dùng chung (`products`, `categories`, `warehouses`) được seed giống nhau
 - FastAPI coordinator thực hiện truy vấn và điều phối giữa các site
-
-Cách tiếp cận này phù hợp với đồ án vì:
-
-- dễ kiểm soát
-- dễ minh họa logic phân tán
-- dễ đối chiếu giữa code và dữ liệu thực tế
-- vẫn thể hiện rõ khái niệm fragmentation và allocation trong hệ phân tán
