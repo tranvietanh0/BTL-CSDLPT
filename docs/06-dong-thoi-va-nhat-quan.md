@@ -17,7 +17,7 @@ Vì vậy, mục tiêu quan trọng của hệ thống là đảm bảo rằng:
 
 ## 2. Khái niệm nhất quán trong bản demo
 
-Nhất quán ở đây được hiểu theo nghĩa thực dụng cho đồ án:
+Nhất quán ở đây được hiểu theo nghĩa thực dụng cho:
 
 - mỗi lần tạo đơn hàng phải bảo toàn ràng buộc `available_qty >= 0`
 - số lượng đã giữ chỗ phải được phản ánh trong `reserved_qty`
@@ -34,7 +34,6 @@ Bảng `inventory` sử dụng hai trường quan trọng:
 ### Lợi ích của mô hình này
 
 - tách bạch “còn hàng vật lý” và “đã được transaction tạm chiếm”
-- dễ giải thích trong báo cáo
 - giúp mô phỏng logic reserve / commit / release gần với hệ thống thật
 
 ## 4. Cơ chế khóa được áp dụng
@@ -110,16 +109,37 @@ Nếu transaction thất bại ở giữa:
 
 ```mermaid
 flowchart TD
-    A[Begin transaction] --> B[SELECT inventory FOR UPDATE]
-    B --> C{available_qty đủ?}
-    C -- No --> D[Rollback / fail request]
-    C -- Yes --> E[Reserve: available--, reserved++]
-    E --> F[Create order + order_items]
-    F --> G{Các bước sau thành công?}
-    G -- Yes --> H[Commit: reserved--, ghi allocation_logs]
-    G -- No --> I[Release: available++, reserved--]
-    H --> J[Transaction complete]
-    I --> J
+    A[Begin transaction]
+
+    A --> B[SELECT inventory<br/>FOR UPDATE]
+
+    B --> C{available_qty<br/>đủ?}
+
+    C -- No --> D[Fail request<br/>không đủ tồn kho]
+
+    C -- Yes --> E[Reserve<br/>available_qty--<br/>reserved_qty++]
+
+    E --> F[Ghi inventory_audit<br/>action = reserve]
+
+    F --> G[Create order]
+
+    G --> H[Create order_items]
+
+    H --> I{Các bước thành công?}
+
+    I -- Yes --> J[Commit<br/>reserved_qty--]
+
+    J --> K[Ghi allocation_logs]
+
+    K --> L[Ghi inventory_audit<br/>action = commit]
+
+    L --> M[Transaction complete]
+
+    I -- No --> N[Release<br/>available_qty++<br/>reserved_qty--]
+
+    N --> O[Ghi inventory_audit<br/>action = release]
+
+    O --> P[Rollback transaction]
 ```
 
 ## 6. Kịch bản đồng thời trong bản demo
@@ -141,22 +161,88 @@ Ví dụ:
 
 ### Kỳ vọng
 
-- chỉ request nào khóa và reserve hợp lệ mới thành công
-- request còn lại có thể fail nếu kho ưu tiên không còn đủ hàng
-- sau cùng, tổng tồn kho vẫn hợp lệ và không âm
+Khi hai request cùng đặt một SKU gần như đồng thời, hệ thống sẽ sử dụng:
+
+```text
+SELECT ... FOR UPDATE
+```
+
+để khóa row inventory tương ứng.
+
+Do đó:
+
+- request đến trước sẽ giữ được lock và thực hiện reserve trước
+- request đến sau phải chờ transaction đầu hoàn tất rồi mới đọc lại tồn kho
+
+Kết quả có thể xảy ra:
+
+#### Trường hợp 1: Tồn kho toàn hệ thống vẫn đủ
+
+Cả hai request đều thành công.
+
+Ví dụ:
+
+```text
+available_qty toàn hệ thống = 20
+```
+
+Hai khách cùng đặt:
+
+```text
+6 + 6 = 12
+```
+
+Kết quả:
+
+- request 1 thành công
+- request 2 vẫn thành công
+- tồn kho còn lại hợp lệ
+
+---
+
+#### Trường hợp 2: Tồn kho không còn đủ
+
+Request đến trước reserve thành công.
+
+Request đến sau sau khi đọc lại inventory:
+
+```text
+available_qty < requested_qty
+```
+
+sẽ:
+
+```text
+fail request
+```
+
+hoặc trả về:
+
+```text
+shortfall_qty
+```
+
+nếu hệ thống không thể fulfillment đủ số lượng.
+
+---
+
+Trong mọi trường hợp, hệ thống cần đảm bảo:
+
+- không xảy ra overselling
+- `available_qty` không bị âm
+- tổng tồn kho cuối cùng luôn nhất quán
+- không có stock bị treo nhờ cơ chế reserve / release
 
 ## 7. Vai trò của inventory_audit
 
-`inventory_audit` là bằng chứng quan trọng để giải thích hệ thống với giảng viên.
-
-Nó cho phép chỉ ra:
+`inventory_audit` cho phép chỉ ra:
 
 - request nào đã reserve
 - request nào đã commit
 - request nào đã release
 - thứ tự thay đổi dữ liệu
 
-Nhờ đó, phần “đồng thời và nhất quán” không chỉ là nói bằng lý thuyết, mà còn có thể chứng minh bằng log dữ liệu thật.
+Nhờ đó, phần “đồng thời và nhất quán” không chỉ là bằng lý thuyết, mà còn có thể chứng minh bằng log dữ liệu thật.
 
 ## 8. Sơ đồ tuần tự của concurrency demo
 
@@ -170,18 +256,32 @@ sequenceDiagram
     R1->>API: Create order
     API->>DB: SELECT ... FOR UPDATE
     DB-->>API: Lock granted
-    API->>DB: Reserve stock
+
+    API->>DB: Check available_qty
+    API->>DB: Reserve stock<br/>available-- reserved++
+
     R2->>API: Create order
     API->>DB: SELECT ... FOR UPDATE
-    DB-->>API: Wait until R1 resolves
+    DB-->>API: Wait (row locked by R1)
+
+    API->>DB: Create order + order_items
     API->>DB: Commit or release
     DB-->>API: Unlock row
-    API->>DB: R2 continues
+
+    API->>DB: R2 acquires lock
+    API->>DB: Re-check available_qty
+
+    alt Inventory đủ
+        API->>DB: Reserve stock
+        API->>DB: Commit transaction
+    else Inventory không đủ
+        API-->>R2: Fail request
+    end
 ```
 
 ## 9. Nhận xét về mức độ hoàn chỉnh
 
-Bản demo hiện tại không triển khai distributed transaction manager hoàn chỉnh kiểu 2PC thực thụ. Tuy nhiên, với phạm vi đồ án, giải pháp đang dùng là hợp lý vì:
+Bản demo hiện tại không triển khai distributed transaction manager hoàn chỉnh kiểu 2PC thực thụ. Tuy nhiên, với phạm vi đự án, giải pháp đang dùng là hợp lý vì:
 
 - có khóa mức dòng
 - có reserve/commit/release rõ ràng

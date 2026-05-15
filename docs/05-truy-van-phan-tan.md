@@ -26,6 +26,35 @@ Cho biết một SKU hiện còn hàng tại site/kho nào, số lượng khả 
 3. hợp nhất thành một response duy nhất
 4. tính tổng available và reserved toàn hệ thống
 
+### Sơ đồ hoạt động truy vấn
+
+```mermaid
+flowchart TD
+    A[Frontend gọi API<br/>GET /inventory/LAP-01/global]
+
+    A --> B[FastAPI Coordinator]
+
+    B --> C[Query north]
+    B --> D[Query central]
+    B --> E[Query south]
+
+    C --> C1[Đọc inventory local<br/>WHERE sku = LAP-01]
+    D --> D1[Đọc inventory local<br/>WHERE sku = LAP-01]
+    E --> E1[Đọc inventory local<br/>WHERE sku = LAP-01]
+
+    C1 --> F[Trả partial result]
+    D1 --> F
+    E1 --> F
+
+    F --> G[Coordinator merge kết quả]
+
+    G --> H[Tính tổng<br/>available_qty + reserved_qty]
+
+    H --> I[Ghép thông tin warehouse/site]
+
+    I --> J[Unified response<br/>trả về frontend]
+```
+
 ### Ý nghĩa phân tán
 
 Đây là truy vấn tiêu biểu nhất để chứng minh dữ liệu vật lý phân tán nhưng người dùng vẫn nhìn thấy một ảnh logic thống nhất.
@@ -63,6 +92,43 @@ Cho biết nếu khách hàng đặt một SKU với số lượng nhất địn
 4. tạo danh sách `allocations`
 5. trả về `shortfall_qty` nếu toàn hệ thống vẫn thiếu
 
+### Sơ đồ hoạt động truy vấn
+
+```mermaid
+flowchart TD
+    A[Frontend gửi request<br/>POST /inventory/quote-fulfillment]
+
+    A --> B[FastAPI Coordinator]
+
+    B --> C[Xác định site ưu tiên<br/>theo customer_region]
+
+    C --> D[Đọc inventory<br/>ở site ưu tiên]
+
+    D --> E{Đủ số lượng?}
+
+    E -- Yes --> F[Tạo allocation]
+
+    E -- No --> G[Tính remaining quantity]
+
+    G --> H[Đọc inventory<br/>ở site tiếp theo]
+
+    H --> I{Đủ số lượng?}
+
+    I -- Yes --> J[Gom allocation]
+
+    I -- No --> K[Tiếp tục kiểm tra<br/>site còn lại]
+
+    K --> L[Gom allocation từ nhiều site]
+
+    L --> M[Tính shortfall_qty<br/>nếu vẫn thiếu]
+
+    F --> N[Trả quote fulfillment]
+    J --> N
+    M --> N
+
+    N --> O[Response cho frontend]
+```
+
 ### Ý nghĩa phân tán
 
 Truy vấn này không chỉ đọc dữ liệu nhiều site mà còn **ra quyết định điều phối** dựa trên dữ liệu phân tán.
@@ -86,6 +152,33 @@ Tính doanh thu đã hoàn tất tại từng site và tổng cộng toàn hệ 
 1. tính doanh thu cục bộ tại mỗi site
 2. cộng dồn thành dòng tổng `all`
 3. trả về một danh sách phục vụ frontend dashboard
+
+### Sơ đồ hoạt động truy vấn
+
+```mermaid
+flowchart TD
+    A[Frontend gọi API<br/>GET /reports/revenue-by-site]
+
+    A --> B[FastAPI Coordinator]
+
+    B --> C[Query north]
+    B --> D[Query central]
+    B --> E[Query south]
+
+    C --> C1[Tính doanh thu local<br/>SUM(total_amount)]
+    D --> D1[Tính doanh thu local<br/>SUM(total_amount)]
+    E --> E1[Tính doanh thu local<br/>SUM(total_amount)]
+
+    C1 --> F[Trả partial revenue]
+    D1 --> F
+    E1 --> F
+
+    F --> G[Coordinator merge kết quả]
+
+    G --> H[Tính tổng doanh thu<br/>site = all]
+
+    H --> I[Trả response dashboard]
+```
 
 ### Ý nghĩa phân tán
 
@@ -113,6 +206,39 @@ Xác định SKU bán chạy nhất trên toàn hệ thống.
 3. cộng số lượng và doanh thu
 4. sắp xếp giảm dần và lấy top 5
 
+### Sơ đồ hoạt động truy vấn
+
+```mermaid
+flowchart TD
+    A[Frontend gọi API<br/>GET /reports/top-products]
+
+    A --> B[FastAPI Coordinator]
+
+    B --> C[Query north]
+    B --> D[Query central]
+    B --> E[Query south]
+
+    C --> C1[Group by SKU<br/>SUM(quantity)<br/>SUM(line_total)]
+    D --> D1[Group by SKU<br/>SUM(quantity)<br/>SUM(line_total)]
+    E --> E1[Group by SKU<br/>SUM(quantity)<br/>SUM(line_total)]
+
+    C1 --> F[Trả partial aggregate]
+    D1 --> F
+    E1 --> F
+
+    F --> G[Coordinator merge cùng SKU]
+
+    G --> H[Cộng quantity<br/>và revenue]
+
+    H --> I[Join products<br/>để lấy tên sản phẩm]
+
+    I --> J[Sắp xếp giảm dần]
+
+    J --> K[Lấy Top 5]
+
+    K --> L[Trả response cho dashboard]
+```
+
 ### Ý nghĩa phân tán
 
 Đây là ví dụ điển hình của truy vấn kiểu **aggregate + merge** giữa nhiều site.
@@ -138,6 +264,41 @@ Tìm các đơn hàng cần phân bổ từ nhiều warehouse/site khác nhau.
 3. đếm số warehouse khác nhau
 4. chỉ giữ lại đơn có `distinct_warehouses > 1`
 
+### Sơ đồ hoạt động truy vấn
+
+```mermaid
+flowchart TD
+    A[Frontend gọi API<br/>GET /reports/multi-warehouse-orders]
+
+    A --> B[FastAPI Coordinator]
+
+    B --> C[Query allocation_logs<br/>site north]
+    B --> D[Query allocation_logs<br/>site central]
+    B --> E[Query allocation_logs<br/>site south]
+
+    C --> C1[Đọc allocation_logs local]
+    D --> D1[Đọc allocation_logs local]
+    E --> E1[Đọc allocation_logs local]
+
+    C1 --> F[Trả partial logs]
+    D1 --> F
+    E1 --> F
+
+    F --> G[Coordinator merge logs]
+
+    G --> H[Group by order_code]
+
+    H --> I[Count distinct warehouse_code]
+
+    I --> J{distinct_warehouses > 1 ?}
+
+    J -- Yes --> K[Giữ lại order]
+
+    J -- No --> L[Loại bỏ]
+
+    K --> M[Trả danh sách<br/>multi-warehouse orders]
+```
+
 ### Ý nghĩa phân tán
 
 Đây là truy vấn có giá trị lớn trong phần thuyết trình vì cho thấy split order là có thật và có thể đo lường được.
@@ -150,13 +311,11 @@ Tìm các đơn hàng cần phân bổ từ nhiều warehouse/site khác nhau.
 | Quote fulfillment      | 2-3 site tùy SKU | fan-out + decision             | allocation theo site                 |
 | Revenue by site        | 3 site           | local aggregate + global merge | doanh thu từng site và toàn hệ thống |
 | Top products           | 3 site           | group + merge                  | top 5 SKU bán chạy                   |
-| Multi-warehouse orders | 3 site           | group + filter                 | đơn hàng split nhiều kho             |
+| Multi-warehouse orders | > 1 site         | group + filter                 | đơn hàng split nhiều kho             |
 
 ## 3.1. Tối ưu dữ liệu trung gian
 
-Trong truy vấn phân tán, nếu coordinator luôn lấy toàn bộ dữ liệu từ mọi site rồi mới xử lý, chi phí truyền dữ liệu sẽ lớn và làm giảm hiệu năng.
-
-Do đó hệ thống áp dụng nguyên tắc:
+Trong truy vấn phân tán, nếu coordinator luôn lấy toàn bộ dữ liệu từ mọi site rồi mới xử lý, chi phí truyền dữ liệu sẽ lớn và làm giảm hiệu năng. Do đó hệ thống áp dụng nguyên tắc:
 
 ### xử lý cục bộ trước, tổng hợp sau
 
