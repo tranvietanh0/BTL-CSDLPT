@@ -157,27 +157,34 @@ Tính doanh thu đã hoàn tất tại từng site và tổng cộng toàn hệ 
 
 ```mermaid
 flowchart TD
-    A[Frontend gọi API<br/>GET /reports/revenue-by-site]
+    A["Frontend gọi API
+GET /reports/revenue-by-site"]
 
-    A --> B[FastAPI Coordinator]
+    A --> B["FastAPI Coordinator"]
 
-    B --> C[Query north]
-    B --> D[Query central]
-    B --> E[Query south]
+    B --> C["Query north"]
+    B --> D["Query central"]
+    B --> E["Query south"]
 
-    C --> C1[Tính doanh thu local<br/>SUM(total_amount)]
-    D --> D1[Tính doanh thu local<br/>SUM(total_amount)]
-    E --> E1[Tính doanh thu local<br/>SUM(total_amount)]
+    C --> C1["Tính doanh thu local
+SUM(total_amount)"]
 
-    C1 --> F[Trả partial revenue]
+    D --> D1["Tính doanh thu local
+SUM(total_amount)"]
+
+    E --> E1["Tính doanh thu local
+SUM(total_amount)"]
+
+    C1 --> F["Trả partial revenue"]
     D1 --> F
     E1 --> F
 
-    F --> G[Coordinator merge kết quả]
+    F --> G["Coordinator merge kết quả"]
 
-    G --> H[Tính tổng doanh thu<br/>site = all]
+    G --> H["Tính tổng doanh thu
+site = all"]
 
-    H --> I[Trả response dashboard]
+    H --> I["Trả response dashboard"]
 ```
 
 ### Ý nghĩa phân tán
@@ -210,33 +217,44 @@ Xác định SKU bán chạy nhất trên toàn hệ thống.
 
 ```mermaid
 flowchart TD
-    A[Frontend gọi API<br/>GET /reports/top-products]
+    A["Frontend gọi API
+GET /reports/top-products"]
 
-    A --> B[FastAPI Coordinator]
+    A --> B["FastAPI Coordinator"]
 
-    B --> C[Query north]
-    B --> D[Query central]
-    B --> E[Query south]
+    B --> C["Query north"]
+    B --> D["Query central"]
+    B --> E["Query south"]
 
-    C --> C1[Group by SKU<br/>SUM(quantity)<br/>SUM(line_total)]
-    D --> D1[Group by SKU<br/>SUM(quantity)<br/>SUM(line_total)]
-    E --> E1[Group by SKU<br/>SUM(quantity)<br/>SUM(line_total)]
+    C --> C1["Group by SKU
+SUM(quantity)
+SUM(line_total)"]
 
-    C1 --> F[Trả partial aggregate]
+    D --> D1["Group by SKU
+SUM(quantity)
+SUM(line_total)"]
+
+    E --> E1["Group by SKU
+SUM(quantity)
+SUM(line_total)"]
+
+    C1 --> F["Trả partial aggregate"]
     D1 --> F
     E1 --> F
 
-    F --> G[Coordinator merge cùng SKU]
+    F --> G["Coordinator merge cùng SKU"]
 
-    G --> H[Cộng quantity<br/>và revenue]
+    G --> H["Cộng quantity
+và revenue"]
 
-    H --> I[Join products<br/>để lấy tên sản phẩm]
+    H --> I["Join products
+để lấy tên sản phẩm"]
 
-    I --> J[Sắp xếp giảm dần]
+    I --> J["Sắp xếp giảm dần"]
 
-    J --> K[Lấy Top 5]
+    J --> K["Lấy Top 5"]
 
-    K --> L[Trả response cho dashboard]
+    K --> L["Trả response cho dashboard"]
 ```
 
 ### Ý nghĩa phân tán
