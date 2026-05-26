@@ -209,7 +209,6 @@ flowchart LR
 - [ ] Đã seed dữ liệu mới
 - [ ] SKU demo vẫn là `LAP-01`
 - [ ] Customer demo vẫn là `CUS-N-01`
-- [ ] Reports trả được dữ liệu
 - [ ] Concurrency demo không gây âm kho
 
 ## 6. Gợi ý khi trả lời phản biện
@@ -220,7 +219,6 @@ Trả lời: vì inventory là dữ liệu cập nhật liên tục, nếu nhân
 
 ### Câu hỏi: Vì sao cần coordinator?
 
-Trả lời: vì người dùng cần một góc nhìn logic toàn cục, trong khi dữ liệu vật lý lại phân tán theo site.
 
 ### Câu hỏi: Hệ thống có chống âm kho không?
 
