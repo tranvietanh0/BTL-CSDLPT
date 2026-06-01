@@ -48,20 +48,45 @@ class ReportService:
         return result[:5]
 
     def multiwarehouseorders(self) -> list[dict]:
-        results: list[dict] = []
         query = """
         SELECT order_code,
-               MAX(site_code) AS primary_site_code,
-               COUNT(DISTINCT warehouse_code)::int AS distinct_warehouses,
-               SUM(allocated_qty)::int AS total_allocated_qty
+               site_code,
+               warehouse_code,
+               allocated_qty
         FROM allocation_logs
         WHERE action = 'commit'
-        GROUP BY order_code
-        HAVING COUNT(DISTINCT warehouse_code) > 1
-        ORDER BY order_code
         """
+        
+        aggregated: dict[str, dict] = defaultdict(lambda: {
+            "order_code": "",
+            "primary_site_code": "",
+            "warehouses": set(),
+            "total_allocated_qty": 0
+        })
+        
         for site in allsites():
-            results.extend(router.executequery(site.code, query))
+            for row in router.executequery(site.code, query):
+                order_code = row["order_code"]
+                bucket = aggregated[order_code]
+                bucket["order_code"] = order_code
+                bucket["warehouses"].add(row["warehouse_code"])
+                bucket["total_allocated_qty"] += row["allocated_qty"]
+                
+                # Cập nhật primary_site_code (có thể ưu tiên lấy site đặt hàng)
+                if not bucket["primary_site_code"] or row["site_code"] == "north":
+                    bucket["primary_site_code"] = row["site_code"]
+                    
+        results: list[dict] = []
+        for bucket in aggregated.values():
+            if len(bucket["warehouses"]) > 1:
+                results.append({
+                    "order_code": bucket["order_code"],
+                    "primary_site_code": bucket["primary_site_code"],
+                    "distinct_warehouses": len(bucket["warehouses"]),
+                    "total_allocated_qty": bucket["total_allocated_qty"]
+                })
+                
+        results.sort(key=lambda x: x["order_code"])
         return results
 
 
