@@ -590,11 +590,3 @@ Mục tiêu:
 - minh họa quá trình reserve/commit/release khi thuyết trình
 
 Điều này đặc biệt quan trọng trong hệ phân tán vì nhiều site có thể cùng tham gia xử lý một đơn hàng.
-
-## 6. Giá trị của hệ thống demo đối với bài tập
-
-Bản demo thể hiện được ba lớp khác nhau:
-
-1. **Lớp dữ liệu**: có lược đồ toàn cục, dữ liệu nhân bản và dữ liệu phân mảnh
-2. **Lớp điều phối**: FastAPI làm coordinator gom và phân phối dữ liệu giữa các site
-3. **Lớp trình diễn**: frontend React hiển thị rõ các flow phân tán một cách trực quan
